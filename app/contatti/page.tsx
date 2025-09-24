@@ -36,6 +36,36 @@ export default function ContattiPage() {
     }))
   }
 
+  const sendEmailWithRetry = async (templateParams: any, maxRetries = 3) => {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`[v0] Email attempt ${attempt}/${maxRetries}`)
+
+        await emailjs.send(
+          "service_yd2e7zf", // Service ID
+          "template_e1o3ry4", // Template ID
+          templateParams,
+          "zKTNyIHIPbrFX_CX0", // Public Key
+        )
+
+        console.log(`[v0] Email sent successfully on attempt ${attempt}`)
+        return { success: true, attempt }
+      } catch (error) {
+        console.error(`[v0] Email attempt ${attempt} failed:`, error)
+
+        if (attempt === maxRetries) {
+          // Last attempt failed
+          throw error
+        }
+
+        // Wait before retry with exponential backoff
+        const delayMs = Math.pow(2, attempt) * 1000 // 2s, 4s, 8s
+        console.log(`[v0] Waiting ${delayMs}ms before retry...`)
+        await new Promise((resolve) => setTimeout(resolve, delayMs))
+      }
+    }
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
@@ -61,16 +91,11 @@ export default function ContattiPage() {
         form_url: window.location.href,
       }
 
-      await emailjs.send(
-        "service_yd2e7zf", // Service ID
-        "template_e1o3ry4", // Template ID
-        templateParams,
-        "zKTNyIHIPbrFX_CX0", // Public Key
-      )
+      const result = await sendEmailWithRetry(templateParams)
 
       toast({
         title: "Messaggio inviato!",
-        description: "Ti risponderemo entro 48 ore.",
+        description: `Ti risponderemo entro 48 ore. (Tentativo ${result.attempt}/${3})`,
       })
 
       setIsSubmitted(true)
@@ -82,10 +107,10 @@ export default function ContattiPage() {
         messaggio: "",
       })
     } catch (error) {
-      console.error("EmailJS error:", error)
+      console.error("EmailJS error after all retries:", error)
       toast({
         title: "Errore nell'invio",
-        description: "Si è verificato un errore. Riprova più tardi.",
+        description: "Si è verificato un errore dopo diversi tentativi. Riprova più tardi o contattaci direttamente.",
         variant: "destructive",
       })
     } finally {
